@@ -70,13 +70,19 @@ function extractOrdersHistoryPageData($: cheerio.CheerioAPI, $card: cheerio.Chee
   const orderNumber = $card.find('.yohtmlc-order-id span').last().text().trim()
   const orderDate = $card.find('.order-header__header-list-item').first().find('.a-size-base').text().trim()
   const total = $card.find('.order-header__header-list-item').eq(1).find('.a-size-base').text().trim()
-  const status = $card.find('.delivery-box__primary-text').text().trim()
-  const collectionMatch = status.match(/Collected on (.+)/)
+  const status = $card
+    .find('.delivery-box__primary-text')
+    .map((_, el) => $(el).text().trim())
+    .get()
+    .join('; ')
+  const collectionMatch = status.match(/(?:Collected on|Odebrano w dniu:) ([^;]+)/)
   const collectionDate = collectionMatch ? collectionMatch[1] : null
 
   // Extract delivery address
   const deliveryName = $card.find('.a-popover-preload h5').text().trim()
-  const deliveryAddress = $card.find('.a-popover-preload .a-row').eq(1).text().trim().replace(/\s+/g, ' ')
+  const $addressRow = $card.find('.a-popover-preload .a-row').eq(1)
+  $addressRow.find('br').replaceWith(', ')
+  const deliveryAddress = $addressRow.text().trim().replace(/\s+/g, ' ')
   const deliveryCountry = $card.find('.a-popover-preload .a-row').last().text().trim()
 
   // Extract items

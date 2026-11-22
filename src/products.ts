@@ -119,7 +119,7 @@ async function extractProductDetailsPageData($: cheerio.CheerioAPI, asin: string
   // Extract reviews information
   const reviews: ProductDetails['data']['reviews'] = {}
 
-  const averageRating = $('#averageCustomerReviews span.a-size-small.a-color-base').text().trim()
+  const averageRating = $('#averageCustomerReviews span.a-size-small.a-color-base').first().text().trim()
   if (averageRating) reviews.averageRating = averageRating
 
   const reviewsCountElement = $('#acrCustomerReviewLink span')
@@ -309,7 +309,10 @@ function extractSearchResultSingleProductData($: cheerio.CheerioAPI, $item: chee
   let pricePerUnit: string | undefined
   const pricePerUnitElement = $item.find('span.a-price[data-a-size="b"][data-a-color="secondary"] > span.a-offscreen')
   if (pricePerUnitElement.length > 0) {
-    const parentText = pricePerUnitElement.parent().parent().text().trim()
+    // each price is rendered twice (a-offscreen + aria-hidden copy); drop the copy
+    const $priceBlock = pricePerUnitElement.parent().parent().clone()
+    $priceBlock.find('[aria-hidden="true"]').remove()
+    const parentText = $priceBlock.text().replace(/\s+/g, ' ').trim()
     pricePerUnit = parentText || undefined
   }
 
