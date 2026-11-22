@@ -1,9 +1,10 @@
+import { fileURLToPath } from 'node:url'
 import * as cheerio from 'cheerio'
 import fs from 'fs'
 import { USE_MOCKS, EXPORT_LIVE_SCRAPING_FOR_MOCKS, getAmazonDomain } from './config.js'
 import { createBrowserAndPage, getTimestamp, throwIfNotLoggedIn } from './utils.js'
 
-const __dirname = new URL('.', import.meta.url).pathname
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 // ##################################
 // Cart Content Types
@@ -83,7 +84,8 @@ function extractCartPageData($: cheerio.CheerioAPI): CartContent {
 
   // Check if cart is empty
   const emptyCartText = $cartContainer.text()
-  if (emptyCartText.includes('Your Amazon Cart is empty')) {
+  // shortcut: Polish phrase not seen live (user's cart was never emptied), confirm on an empty cart
+  if (emptyCartText.includes('Your Amazon Cart is empty') || emptyCartText.includes('koszyk Amazon jest pusty')) {
     return {
       isEmpty: true,
       items: [],
@@ -208,7 +210,7 @@ export async function addToCart(asin: string): Promise<{ success: boolean; messa
       // Check for success message
       const confirmationText = await page.$eval('#sw-atc-confirmation', el => el.textContent || '')
 
-      if (!confirmationText.includes('Added to cart') && !confirmationText.includes('Added to basket')) {
+      if (!['Added to cart', 'Added to basket', 'Dodano do koszyka'].some(t => confirmationText.includes(t))) {
         throw new Error(`Unexpected confirmation message: ${confirmationText}`)
       }
 

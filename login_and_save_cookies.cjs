@@ -25,9 +25,7 @@ const POLL_INTERVAL_MS = 2000;
 const DEADLINE_MS = 15 * 60 * 1000;
 
 if (!EMAIL || !PASSWORD) {
-  console.error("Set AMAZON_EMAIL and AMAZON_PASSWORD env vars.");
-  console.error("Optionally set AMAZON_DOMAIN (default: amazon.com). E.g. AMAZON_DOMAIN=amazon.de");
-  process.exit(1);
+  console.error("AMAZON_EMAIL / AMAZON_PASSWORD not set: log in manually in the browser window.");
 }
 
 // Escape the domain for use in a RegExp (".com" → "\\.com").
@@ -72,7 +70,7 @@ async function isLoggedIn(page) {
     .$eval("#nav-link-accountList-nav-line-1", (el) => el.textContent.trim())
     .catch(() => null);
   if (!greeting) return false;
-  if (/sign\s*in/i.test(greeting)) return false;
+  if (/sign\s*in|zaloguj/i.test(greeting)) return false;
   return true;
 }
 

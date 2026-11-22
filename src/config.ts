@@ -1,6 +1,8 @@
+import { fileURLToPath } from 'node:url'
 import { loadAmazonCookiesFile } from './utils.js'
 
-const __dirname = new URL('.', import.meta.url).pathname
+// fileURLToPath, not .pathname: .pathname gives "/C:/..." on Windows, which fs can't find
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 export const IS_BROWSER_VISIBLE = false
 

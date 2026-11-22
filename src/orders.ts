@@ -1,10 +1,11 @@
+import { fileURLToPath } from 'node:url'
 import * as cheerio from 'cheerio'
 import fs from 'fs'
 import puppeteer from 'puppeteer'
 import { USE_MOCKS, EXPORT_LIVE_SCRAPING_FOR_MOCKS, getAmazonDomain } from './config.js'
 import { createBrowserAndPage, getTimestamp, throwIfNotLoggedIn } from './utils.js'
 
-const __dirname = new URL('.', import.meta.url).pathname
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 // ##################################
 // Get Orders History
@@ -102,9 +103,9 @@ function extractOrdersHistoryPageData($: cheerio.CheerioAPI, $card: cheerio.Chee
 
     let returnEligible = false
     let returnDate = null
-    if (returnText.includes('Return or Replace Items')) {
+    if (returnText.includes('Return or Replace Items') || returnText.includes('Zwróć')) {
       returnEligible = true
-      const returnDateMatch = returnText.match(/until (.+)/)
+      const returnDateMatch = returnText.match(/(?:until|wygasa w dniu) (.+)/)
       returnDate = returnDateMatch ? returnDateMatch[1] : null
     }
 

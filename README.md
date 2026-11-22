@@ -1,70 +1,91 @@
-# Amazon MCP Server
+# Amazon MCP Server – wersja dla amazon.pl
 
-This server allows you to interact with Amazon's services using the MCP (Model Context Protocol) framework. This lets you use your Amazon account through ChatGPT or Claude AI interfaces.
+Fork [NZX-DeSiGN/mcp-server-amazon](https://github.com/NZX-DeSiGN/mcp-server-amazon) dostosowany do **amazon.pl** i **Windowsa**. Serwer MCP pozwala Claude (lub innemu klientowi MCP) korzystać z Twojego konta Amazon: wyszukiwać produkty, przeglądać koszyk i historię zamówień.
 
-## Features
+Działa przez scraping (Puppeteer + Cheerio) z ciasteczkami Twojej sesji. Domena sklepu jest wykrywana z ciasteczek, więc po zalogowaniu na amazon.pl wszystkie zapytania idą na amazon.pl.
 
-- **Product search**: Search for products on Amazon
-- **Product details**: Retrieve detailed information about a specific product on Amazon
-- **Cart management**: Add items or clear your Amazon cart
-- **Ordering**: Place orders (fake for demonstration purposes)
-- **Orders history**: Retrieve your recent Amazon orders details
+## Zmiany względem oryginału
 
-## Demo
+- **Windows:** ścieżki budowane przez `fileURLToPath` zamiast `URL.pathname` (oryginał dawał `/C:/...` i nie znajdował `amazonCookies.json`).
+- **Polska wersja strony:** amazon.pl ignoruje `/-/en/` w adresie i zwraca stronę po polsku. Dodane polskie odpowiedniki tekstów, po których serwer rozpoznaje stan strony:
+  - „Reklama sponsorowana —” (oznaczanie reklam w wynikach wyszukiwania),
+  - „Dodano do koszyka” (potwierdzenie dodania),
+  - „Zwróć… Możliwość wygasa w dniu …” (możliwość i termin zwrotu w historii zamówień),
+  - „koszyk Amazon jest pusty” (pusty koszyk; tej frazy nie sprawdzono jeszcze na żywo).
+- **Skrypt logowania:** hasło nie jest wymagane w zmiennej środowiskowej, można zalogować się ręcznie w otwartym oknie. Polskie „Witamy, zaloguj się” nie jest już mylone ze stanem zalogowanym.
 
-Simple demo, showcasing a quick product search and purchase.
+## Narzędzia
 
-![Demo GIF video](./demo.gif)
+| Narzędzie | Opis | amazon.pl |
+|---|---|---|
+| `search-products` | wyszukiwanie produktów | ✅ |
+| `get-product-details` | szczegóły produktu po ASIN | ✅ |
+| `get-cart-content` | zawartość koszyka | ✅ |
+| `add-to-cart` | dodanie produktu do koszyka | ✅ |
+| `remove-from-cart` | usunięcie jednego produktu z koszyka | ✅ |
+| `clear-cart` | wyczyszczenie koszyka | nietestowane |
+| `get-orders-history` | ostatnie zamówienia | ✅ |
+| `perform-purchase` | zakup – **atrapa**, niczego nie zamawia | – |
 
-## Full Demo
+## Instalacja
 
-Another more complex demo with products search, leveraging Claude AI recommendations to compare and make a decision, then purchase.
-
-It showcases how natural and powerful the Amazon MCP integration could be inside a conversation
-
-Video: https://www.youtube.com/watch?v=xas2CLkJDYg
-
-## Install
-
-Install dependencies
-
-```sh
-npm install -D
-```
-
-Build the project
+Wymagany Node.js 20+.
 
 ```sh
-npm run build
+git clone https://github.com/kbzowski/mcp-server-amazon-pl
+cd mcp-server-amazon-pl
+npm install
+npx puppeteer browsers install chrome
+npx tsc
 ```
 
-## Claude Desktop Integration
+`npm run build` nie działa na Windowsie (używa `chmod`), dlatego budowanie przez `npx tsc`. Drugie polecenie jest potrzebne, gdy npm zablokuje skrypt instalacyjny Puppeteera i Chrome nie zostanie pobrany.
 
-Create or update `~/Library/Application Support/Claude/claude_desktop_config.json` with the path to the MCP server.
+## Logowanie
+
+```sh
+AMAZON_DOMAIN=amazon.pl node login_and_save_cookies.cjs
+```
+
+W PowerShellu: `$env:AMAZON_DOMAIN="amazon.pl"; node login_and_save_cookies.cjs`
+
+Otworzy się okno Chrome. Zaloguj się (z CAPTCHA i kodem 2FA, jeśli Amazon o nie poprosi) i nie zamykaj okna – skrypt sam wykryje zalogowanie i zapisze ciasteczka do `amazonCookies.json`. Opcjonalnie można podać `AMAZON_EMAIL` i `AMAZON_PASSWORD`, wtedy formularz wypełni się sam.
+
+`amazonCookies.json` zawiera aktywną sesję Twojego konta i jest w `.gitignore`. Nie publikuj go. Gdy sesja wygaśnie, uruchom skrypt ponownie.
+
+## Podłączenie do Claude
+
+**Claude Code:**
+
+```sh
+claude mcp add amazon -s user -- node /pelna/sciezka/do/mcp-server-amazon-pl/build/index.js
+```
+
+**Claude Desktop** (`%APPDATA%\Claude\claude_desktop_config.json` na Windowsie, `~/Library/Application Support/Claude/claude_desktop_config.json` na macOS):
 
 ```json
 {
   "mcpServers": {
     "amazon": {
       "command": "node",
-      "args": ["/Users/admin/dev/mcp-server-amazon/build/index.js"]
+      "args": ["D:/sciezka/do/mcp-server-amazon-pl/build/index.js"]
     }
   }
 }
 ```
 
-Restart the Claude Desktop app to apply the changes. You should now see the Amazon MCP server listed in the Claude Desktop app.
+Po zmianie konfiguracji uruchom klienta ponownie.
 
-|                                  |                                    |
-| :------------------------------: | :--------------------------------: |
-| ![screenshot](./screenshot.webp) | ![screenshot2](./screenshot2.webp) |
+## Prywatność
 
-## Troubleshooting
+Przy każdym wywołaniu serwer zapisuje pobrany HTML do `mocks/` (razem z danymi z zamówień, np. adresami dostawy). Pliki są w `.gitignore`. Żeby to wyłączyć, ustaw `EXPORT_LIVE_SCRAPING_FOR_MOCKS = false` w `src/config.ts` i przebuduj. Stare pliki usuniesz przez `rm mocks/*_202*`.
 
-The MCP server logs its output to a file. If you encounter any issues, you can check the log file for more information.
+## Problemy
 
-See `~/Library/Logs/Claude/mcp-server-amazon.log`
+- **„You need to be logged in”** – sesja wygasła, zaloguj się ponownie.
+- **Puste wyniki lub błędy parsowania** – Amazon zmienił układ strony; selektory są w `src/products.ts`, `src/cart.ts`, `src/orders.ts`.
+- Szczegóły działania serwera widać w logach klienta MCP (w Claude Desktop: `%APPDATA%\Claude\logs\mcp-server-amazon.log`).
 
-## License
+## Licencja
 
-[The MIT license](./LICENSE)
+[MIT](./LICENSE), jak oryginał.
