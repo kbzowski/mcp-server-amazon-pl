@@ -13,10 +13,10 @@
     "build"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.4.0",
-    "cheerio": "^1.1.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "cheerio": "^1.2.0",
     "puppeteer": "^24.10.2",
-    "zod": "^3.25.67"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
