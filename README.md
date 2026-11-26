@@ -29,17 +29,17 @@ Działa przez scraping (Puppeteer + Cheerio) z ciasteczkami Twojej sesji. Domena
 
 ## Instalacja
 
-Wymagany Node.js 20+.
+Wymagany Node.js 22.12+ i pnpm.
 
 ```sh
 git clone https://github.com/kbzowski/mcp-server-amazon-pl
 cd mcp-server-amazon-pl
-npm install
-npx puppeteer browsers install chrome
-npx tsc
+pnpm install
+pnpm exec puppeteer browsers install chrome
+pnpm exec tsc
 ```
 
-`npm run build` nie działa na Windowsie (używa `chmod`), dlatego budowanie przez `npx tsc`. Drugie polecenie jest potrzebne, gdy npm zablokuje skrypt instalacyjny Puppeteera i Chrome nie zostanie pobrany.
+`pnpm build` nie działa na Windowsie (używa `chmod`), dlatego budowanie przez `pnpm exec tsc`. Drugie polecenie jest potrzebne, gdy pnpm zablokuje skrypt instalacyjny Puppeteera i Chrome nie zostanie pobrany.
 
 ## Logowanie
 

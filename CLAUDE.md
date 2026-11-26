@@ -9,14 +9,14 @@ This is an Amazon MCP (Model Context Protocol) Server that enables AI assistants
 ## Development Commands
 
 ```bash
-# Install dependencies (use -D flag for Puppeteer)
-npm install -D
+# Install dependencies (puppeteer build script is allowed via allowBuilds in pnpm-workspace.yaml)
+pnpm install
 
 # Build TypeScript to JavaScript
-npm run build
+pnpm build
 
 # Clean mock HTML files
-npm run clean
+pnpm clean
 ```
 
 ## Architecture
