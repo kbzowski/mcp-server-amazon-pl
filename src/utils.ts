@@ -1,5 +1,5 @@
 import fs from 'fs'
-import puppeteer from 'puppeteer'
+import puppeteer, { type Browser, type Page } from 'puppeteer'
 import { COOKIES_FILE_PATH, AMAZON_COOKIES, IS_BROWSER_VISIBLE } from './config.js'
 
 /** Get the current timestamp like "2024-06-06_15-30-45" */
@@ -31,7 +31,7 @@ export function loadAmazonCookiesFile() {
   }
 }
 
-export async function createBrowserAndPage(): Promise<{ browser: puppeteer.Browser; page: puppeteer.Page }> {
+export async function createBrowserAndPage(): Promise<{ browser: Browser; page: Page }> {
   // Launch Puppeteer
   const browser = await puppeteer.launch({
     headless: !IS_BROWSER_VISIBLE,
@@ -77,7 +77,7 @@ export async function downloadImageAsBase64(url: string): Promise<string> {
   return `${b64}`
 }
 
-export async function throwIfNotLoggedIn(page: puppeteer.Page): Promise<void> {
+export async function throwIfNotLoggedIn(page: Page): Promise<void> {
   const isLoginPage = (await page.$('#ap_email')) !== null || (await page.$('#signInSubmit')) !== null
   if (isLoginPage) {
     throw new Error('You need to be logged in to access this feature. Please log in to Amazon first and then try again.')

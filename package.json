@@ -4,6 +4,9 @@
   "description": "Amazon Model Context Protocol Server",
   "version": "1.0.0",
   "main": "./build/index.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "type": "module",
   "scripts": {
     "build": "tsc && chmod -R 755 ./build",
@@ -15,11 +18,11 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "cheerio": "^1.2.0",
-    "puppeteer": "^24.10.2",
+    "puppeteer": "^25.18.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.2"
+    "@types/node": "^24.19.4",
+    "typescript": "^7.0.2"
   }
 }

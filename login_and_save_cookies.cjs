@@ -98,7 +98,7 @@ async function isLoggedIn(page) {
   try {
     await page.waitForSelector("#ap_email, #ap_email_login", { timeout: 15000 });
     const emailSel = (await page.$("#ap_email")) ? "#ap_email" : "#ap_email_login";
-    await page.click(emailSel, { clickCount: 3 });
+    await page.click(emailSel, { count: 3 });
     await page.type(emailSel, EMAIL, { delay: 30 });
     const continueBtn = await page.$("#continue, #continue-announce");
     if (continueBtn) {
