@@ -85,9 +85,10 @@ async function isLoggedIn(page) {
     ],
   });
   const [page] = await browser.pages();
-  await page.setUserAgent(
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
-  );
+  await page.setUserAgent({
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+  });
 
   let browserClosed = false;
   browser.on("disconnected", () => { browserClosed = true; });

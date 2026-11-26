@@ -1,7 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import * as cheerio from 'cheerio'
 import fs from 'fs'
-import puppeteer from 'puppeteer'
 import { USE_MOCKS, EXPORT_LIVE_SCRAPING_FOR_MOCKS, getAmazonDomain } from './config.js'
 import { createBrowserAndPage, getTimestamp, throwIfNotLoggedIn } from './utils.js'
 

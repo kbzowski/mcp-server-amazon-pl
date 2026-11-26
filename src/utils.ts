@@ -59,9 +59,10 @@ export async function createBrowserAndPage(): Promise<{ browser: Browser; page: 
   })
 
   // Set user agent to match real browser
-  await page.setUserAgent(
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
-  )
+  await page.setUserAgent({
+    userAgent:
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+  })
 
   // Set viewport
   await page.setViewport({ width: 1366, height: 768 })
