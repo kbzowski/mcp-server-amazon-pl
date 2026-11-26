@@ -31,7 +31,7 @@ export function getCookies(): CookieFile {
   try {
     json = JSON.parse(fs.readFileSync(COOKIES_FILE_PATH, 'utf-8'))
   } catch (error) {
-    throw new Error(`amazonCookies.json is not valid JSON: ${error instanceof Error ? error.message : error}`)
+    throw new Error(`amazonCookies.json is not valid JSON: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
   }
   const parsed = cookieFileSchema.safeParse(json)
   if (!parsed.success) throw new Error(`amazonCookies.json has an unexpected format: ${z.prettifyError(parsed.error)}`)
@@ -54,7 +54,7 @@ export function getAmazonDomain(): string {
   try {
     fromCookies = detectDomain(getCookies().map(c => c.domain))
   } catch (error) {
-    console.error(`[WARN] ${error instanceof Error ? error.message : error}`)
+    console.error(`[WARN] ${error instanceof Error ? error.message : String(error)}`)
   }
   domain = fromCookies ?? process.env.AMAZON_DOMAIN ?? 'amazon.com'
   console.error(`[INFO] Using Amazon domain ${domain}`)

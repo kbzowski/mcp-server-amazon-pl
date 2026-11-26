@@ -55,7 +55,11 @@ export function parseProductDetails(html: string, asin: string): ProductDetails 
     },
     reviews: {
       averageRating: $('#averageCustomerReviews span.a-size-small.a-color-base').first().text().trim() || undefined,
-      reviewCount: reviewsLabel?.replace(/\s+.*$/g, '').replace(/,/g, '').trim() || undefined,
+      reviewCount:
+        reviewsLabel
+          ?.replace(/\s+.*$/g, '')
+          .replace(/,/g, '')
+          .trim() || undefined,
     },
     mainImageUrl: $('#main-image-container img.a-dynamic-image').attr('src'),
   }

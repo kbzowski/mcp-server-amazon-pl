@@ -12,6 +12,8 @@ This is an Amazon MCP (Model Context Protocol) Server that enables AI assistants
 pnpm install        # puppeteer build script is allowed via allowBuilds in pnpm-workspace.yaml
 pnpm build          # tsc → build/
 pnpm test           # offline parser tests against mocks/ (node:test)
+pnpm lint           # oxlint, type-aware (.oxlintrc.json)
+pnpm format         # oxfmt (.oxfmtrc.json); format:check in CI
 pnpm amazon-login   # interactive login, writes amazonCookies.json (AMAZON_DOMAIN=amazon.pl)
 pnpm clean          # delete timestamped page dumps in mocks/
 ```

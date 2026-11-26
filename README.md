@@ -15,16 +15,16 @@ Działa przez scraping (Puppeteer + Cheerio) z ciasteczkami Twojej sesji. Domena
 
 ## Narzędzia
 
-| Narzędzie | Opis | amazon.pl |
-|---|---|---|
-| `search-products` | wyszukiwanie produktów | ✅ |
-| `get-product-details` | szczegóły produktu po ASIN | ✅ |
-| `get-cart-content` | zawartość koszyka | ✅ |
-| `add-to-cart` | dodanie produktu do koszyka | ✅ |
-| `remove-from-cart` | usunięcie jednego produktu z koszyka | ✅ |
-| `clear-cart` | wyczyszczenie koszyka | nietestowane |
-| `get-orders-history` | ostatnie zamówienia | ✅ |
-| `perform-purchase` | zakup – **atrapa**, niczego nie zamawia | – |
+| Narzędzie             | Opis                                    | amazon.pl    |
+| --------------------- | --------------------------------------- | ------------ |
+| `search-products`     | wyszukiwanie produktów                  | ✅           |
+| `get-product-details` | szczegóły produktu po ASIN              | ✅           |
+| `get-cart-content`    | zawartość koszyka                       | ✅           |
+| `add-to-cart`         | dodanie produktu do koszyka             | ✅           |
+| `remove-from-cart`    | usunięcie jednego produktu z koszyka    | ✅           |
+| `clear-cart`          | wyczyszczenie koszyka                   | nietestowane |
+| `get-orders-history`  | ostatnie zamówienia                     | ✅           |
+| `perform-purchase`    | zakup – **atrapa**, niczego nie zamawia | –            |
 
 ## Instalacja
 

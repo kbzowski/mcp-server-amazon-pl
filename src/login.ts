@@ -1,6 +1,6 @@
 // `pnpm amazon-login`: AMAZON_DOMAIN=amazon.pl, optional AMAZON_EMAIL / AMAZON_PASSWORD; CAPTCHA and OTP are finished by hand.
 import fs from 'node:fs'
-import puppeteer, { type Page } from 'puppeteer'
+import { launch, type Page } from 'puppeteer'
 import { STEALTH_ARGS, USER_AGENT } from './browser.js'
 import { COOKIES_FILE_PATH, type CookieFile } from './session.js'
 
@@ -48,7 +48,7 @@ async function fillLoginForm(page: Page, email: string, password: string) {
   }
 }
 
-const browser = await puppeteer.launch({ headless: false, defaultViewport: null, args: [...STEALTH_ARGS, '--window-size=1280,900'] })
+const browser = await launch({ headless: false, defaultViewport: null, args: [...STEALTH_ARGS, '--window-size=1280,900'] })
 let browserClosed = false
 browser.on('disconnected', () => {
   browserClosed = true

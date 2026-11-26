@@ -85,7 +85,8 @@ server.registerTool(
   'add-to-cart',
   {
     title: 'Add to cart',
-    description: 'Add a product to the Amazon cart using ASIN - You should always ask for confirmation to the user before running this tool',
+    description:
+      'Add a product to the Amazon cart using ASIN - You should always ask for confirmation to the user before running this tool',
     inputSchema: { asin: asinInput('add to cart') },
     outputSchema: cartActionSchema,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },

@@ -1,22 +1,22 @@
 {
   "name": "mcp-server-amazon",
+  "version": "1.0.0",
   "private": true,
   "description": "Amazon Model Context Protocol Server",
-  "version": "1.0.0",
-  "main": "./build/index.js",
-  "engines": {
-    "node": ">=22.12.0"
-  },
+  "files": [
+    "build"
+  ],
   "type": "module",
+  "main": "./build/index.js",
   "scripts": {
     "build": "tsc",
     "test": "tsc && node --test build/parsers.test.js",
     "amazon-login": "node build/login.js",
-    "clean": "rm mocks/*_202*"
+    "clean": "rm mocks/*_202*",
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
   },
-  "files": [
-    "build"
-  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "cheerio": "^1.2.0",
@@ -25,6 +25,12 @@
   },
   "devDependencies": {
     "@types/node": "^24.19.4",
+    "oxfmt": "^0.80.0",
+    "oxlint": "^1.95.0",
+    "oxlint-tsgolint": "^7.0.2008",
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

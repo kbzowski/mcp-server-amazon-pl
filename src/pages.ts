@@ -7,7 +7,11 @@ import { getAmazonDomain } from './session.js'
 export const MOCKS_DIR = fileURLToPath(new URL('../mocks/', import.meta.url))
 
 const PAGES = {
-  cart: { path: () => '/-/en/gp/cart/view.html', ready: '#sc-active-cart, .sc-cart-item, .sc-empty-cart-banner', missing: 'cart container' },
+  cart: {
+    path: () => '/-/en/gp/cart/view.html',
+    ready: '#sc-active-cart, .sc-cart-item, .sc-empty-cart-banner',
+    missing: 'cart container',
+  },
   orders: { path: () => '/-/en/gp/css/order-history', ready: '.order-card, .your-orders-content-container', missing: 'orders list' },
   product: { path: (asin: string) => `/-/en/gp/product/${asin}`, ready: '#productTitle', missing: 'product title' },
   search: { path: (term: string) => `/s?k=${encodeURIComponent(term)}`, ready: '.s-search-results', missing: 'search results' },

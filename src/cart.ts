@@ -58,7 +58,11 @@ export function parseCart(html: string): CartContent {
   const subtotal =
     $cartContainer.find('#sc-subtotal-amount-activecart .sc-price').text().trim() ||
     $cartContainer.find('.sc-subtotal .sc-price').text().trim()
-  const totalItemsMatch = $cartContainer.find('#sc-subtotal-label-activecart').text().trim().match(/\((\d+)\s+item/)
+  const totalItemsMatch = $cartContainer
+    .find('#sc-subtotal-label-activecart')
+    .text()
+    .trim()
+    .match(/\((\d+)\s+item/)
 
   return {
     isEmpty: false,
@@ -88,10 +92,9 @@ export async function addToCart(asin: string): Promise<CartActionResult> {
     await openPage(page, 'product', asin)
 
     const oneTimePurchase = await page
-      .waitForSelector(
-        "::-p-xpath(//div[contains(@class, 'accordion-caption')]//span[contains(text(), 'One-time purchase')])",
-        { timeout: 2000 }
-      )
+      .waitForSelector("::-p-xpath(//div[contains(@class, 'accordion-caption')]//span[contains(text(), 'One-time purchase')])", {
+        timeout: 2000,
+      })
       .catch(() => null)
     if (oneTimePurchase) {
       console.error('[INFO][add-to-cart] Subscribe and save product, choosing one-time purchase')
@@ -103,7 +106,7 @@ export async function addToCart(asin: string): Promise<CartActionResult> {
       await page.waitForSelector('#add-to-cart-button', { timeout: 10000 })
       await page.click('#add-to-cart-button')
     } catch (error) {
-      throw new Error(`Could not find or click the add to cart button: ${error}`)
+      throw new Error(`Could not find or click the add to cart button: ${String(error)}`, { cause: error })
     }
 
     // Insurance upsell: decline it when it shows up.
@@ -156,7 +159,9 @@ export async function removeFromCart(asin: string): Promise<CartActionResult> {
     const success = (await page.$(cartRow(asin))) === null
     return {
       success,
-      message: success ? `Successfully removed item ${asin} from cart.` : `Clicked delete for ASIN ${asin} but it still appears in the cart.`,
+      message: success
+        ? `Successfully removed item ${asin} from cart.`
+        : `Clicked delete for ASIN ${asin} but it still appears in the cart.`,
       cart,
     }
   })
