@@ -1,384 +1,188 @@
-import { fileURLToPath } from 'node:url'
 import * as cheerio from 'cheerio'
-import fs from 'fs'
-import { USE_MOCKS, EXPORT_LIVE_SCRAPING_FOR_MOCKS, getAmazonDomain } from './config.js'
-import { createBrowserAndPage, getTimestamp, throwIfNotLoggedIn } from './utils.js'
+import type { Page } from 'puppeteer'
+import { z } from 'zod'
+import { throwIfNotLoggedIn, withPage } from './browser.js'
+import { fetchPage, openPage, pageUrl } from './pages.js'
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
+export const cartSchema = z.object({
+  isEmpty: z.boolean(),
+  items: z.array(
+    z.object({
+      title: z.string(),
+      price: z.string(),
+      quantity: z.number(),
+      image: z.string().optional(),
+      productUrl: z.string().optional(),
+      asin: z.string().optional(),
+      availability: z.string(),
+      isSelected: z.boolean(),
+    })
+  ),
+  subtotal: z.string().optional(),
+  totalItems: z.number().optional(),
+})
+export type CartContent = z.infer<typeof cartSchema>
 
-// ##################################
-// Cart Content Types
-// ##################################
+export const cartActionSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  cart: cartSchema.optional().describe('Cart content after the action, when it could be read'),
+})
+export type CartActionResult = z.infer<typeof cartActionSchema>
 
-interface CartItem {
-  title: string
-  price: string
-  quantity: number
-  image?: string
-  productUrl?: string
-  asin?: string
-  availability: string
-  isSelected: boolean
-}
-
-interface CartContent {
-  isEmpty: boolean
-  items: CartItem[]
-  subtotal?: string
-  totalItems?: number
-}
-
-// ##################################
-// Get Cart Content
-// ##################################
-
-export async function getCartContent(): Promise<CartContent> {
-  let html: string
-  if (USE_MOCKS) {
-    console.error('[INFO][get-cart-content] Fetching cart content from mocks')
-    const mockPath = `${__dirname}/../mocks/getCartContent.html`
-    html = fs.readFileSync(mockPath, 'utf-8')
-  } else {
-    const domain = getAmazonDomain()
-    const url = `https://www.${domain}/-/en/gp/cart/view.html?ref_=nav_cart`
-    console.error(`[INFO][get-cart-content] Fetching cart content from ${url}`)
-
-    const { browser, page } = await createBrowserAndPage()
-
-    try {
-      // Navigate to the cart page
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 })
-
-      // Handle login if needed
-      await throwIfNotLoggedIn(page)
-
-      // Wait for the cart content to load
-      try {
-        await page.waitForSelector('#sc-active-cart', { timeout: 10000 })
-      } catch (e) {
-        throw new Error('[INFO][get-cart-content] Could not find cart container. Ensure you are logged in and the cart is accessible.')
-      }
-
-      if (EXPORT_LIVE_SCRAPING_FOR_MOCKS) {
-        // Export only the `#sc-active-cart` content to a mock file
-        const timestamp = getTimestamp()
-        const mockPath = `${__dirname}/../mocks/getCartContent_${timestamp}.html`
-        const cartHtml = await page.$eval('#sc-active-cart', el => el.outerHTML)
-        fs.writeFileSync(mockPath, cartHtml)
-        console.error(`[INFO][get-cart-content] Exported cart container HTML to ${mockPath}`)
-      }
-
-      // Get the HTML content after JavaScript execution
-      html = await page.content()
-    } finally {
-      await browser.close()
-    }
-  }
-
+export function parseCart(html: string): CartContent {
   const $ = cheerio.load(html)
-  return extractCartPageData($)
-}
-
-function extractCartPageData($: cheerio.CheerioAPI): CartContent {
   const $cartContainer = $('#sc-active-cart')
 
-  // Check if cart is empty
-  const emptyCartText = $cartContainer.text()
-  // shortcut: Polish phrase not seen live (user's cart was never emptied), confirm on an empty cart
-  if (emptyCartText.includes('Your Amazon Cart is empty') || emptyCartText.includes('koszyk Amazon jest pusty')) {
-    return {
-      isEmpty: true,
-      items: [],
-    }
-  }
+  const $rows = $cartContainer.find('[data-asin]')
+  // No rows means empty; rows we cannot parse are reported as a non-empty cart with no items.
+  if ($rows.length === 0) return { isEmpty: true, items: [] }
 
-  // Extract cart items
-  const items: CartItem[] = []
-  $cartContainer.find('[data-asin]').each((_index, element) => {
+  const items: CartContent['items'] = []
+  $rows.each((_index, element) => {
     const $item = $(element)
-
-    // Extract basic item information
-    const titleElement = $item.find('a.sc-product-title').first()
-    const title = titleElement.find('.a-truncate-full').text().trim()
+    const title = $item.find('a.sc-product-title').first().find('.a-truncate-full').text().trim()
     const price = $item.find('.apex-price-to-pay-value .a-offscreen').text().trim()
-    const quantityElement = $item.find('[data-a-selector="value"]').text().trim()
-    const quantity = parseInt(quantityElement) || 1
-
-    // Extract optional information
-    const image = $item.find('.sc-product-image').attr('src')
-    const productUrl = $item.find('.sc-product-link').attr('href')
-    const asin = $item.attr('data-asin')
-    const availability = $item.find('.sc-product-availability').text().trim() || 'Unknown'
-    const isSelected = $item.find('input[type="checkbox"]').is(':checked')
-
-    console.error(`[INFO][get-cart-content] Extracted ASIN: ${asin}, Price: ${price}, Quantity: ${quantity}, item: ${title}`)
-    // Only add items with valid titles and prices
-    if (title && price) {
-      items.push({
-        title,
-        price,
-        quantity,
-        image,
-        productUrl,
-        asin,
-        availability,
-        isSelected,
-      })
-    }
+    if (!title || !price) return
+    items.push({
+      title,
+      price,
+      quantity: parseInt($item.find('[data-a-selector="value"]').text().trim()) || 1,
+      image: $item.find('.sc-product-image').attr('src'),
+      productUrl: $item.find('.sc-product-link').attr('href'),
+      asin: $item.attr('data-asin'),
+      availability: $item.find('.sc-product-availability').text().trim() || 'Unknown',
+      isSelected: $item.find('input[type="checkbox"]').is(':checked'),
+    })
   })
-
-  // Extract subtotal information
   const subtotal =
     $cartContainer.find('#sc-subtotal-amount-activecart .sc-price').text().trim() ||
     $cartContainer.find('.sc-subtotal .sc-price').text().trim()
-
-  const totalItemsText = $cartContainer.find('#sc-subtotal-label-activecart').text().trim()
-  const totalItemsMatch = totalItemsText.match(/\((\d+)\s+item/)
-  const totalItems = totalItemsMatch ? parseInt(totalItemsMatch[1]) : items.length
+  const totalItemsMatch = $cartContainer.find('#sc-subtotal-label-activecart').text().trim().match(/\((\d+)\s+item/)
 
   return {
     isEmpty: false,
     items,
     subtotal,
-    totalItems,
+    totalItems: totalItemsMatch ? parseInt(totalItemsMatch[1]) : items.length,
   }
 }
 
-// ##################################
-// Add to Cart
-// ##################################
+export async function getCartContent(): Promise<CartContent> {
+  return parseCart(await fetchPage('cart'))
+}
 
-export async function addToCart(asin: string): Promise<{ success: boolean; message: string }> {
-  if (!asin || asin.length !== 10) {
-    throw new Error('Invalid ASIN provided. ASIN should be a 10-character string.')
-  }
+const DELETE_BUTTON = 'span[data-action="delete-active"]'
+const cartRow = (asin: string) => `#sc-active-cart [data-asin="${asin}"]`
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  const domain = getAmazonDomain()
-  const url = `https://www.${domain}/-/en/gp/product/${asin}`
-  console.error(`[INFO][add-to-cart] Adding product ${asin} to cart from ${url}`)
+// No ready-selector wait: an emptied cart may not render the selectors a filled one does.
+async function reloadCart(page: Page): Promise<CartContent> {
+  await page.goto(pageUrl('cart'), { waitUntil: 'networkidle2', timeout: 30000 })
+  await throwIfNotLoggedIn(page)
+  return parseCart(await page.content())
+}
 
-  const { browser, page } = await createBrowserAndPage()
+export async function addToCart(asin: string): Promise<CartActionResult> {
+  return withPage(async page => {
+    await openPage(page, 'product', asin)
 
-  try {
-    // Navigate to the product page
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 })
-
-    // Handle login if needed
-    await throwIfNotLoggedIn(page)
-
-    // Wait for the page to load completely
-    await page.waitForSelector('body', { timeout: 10000 })
-
-    try {
-      // Check for subscribe and save option using XPath
-      const xpath = "//div[contains(@class, 'accordion-caption')]//span[contains(text(), 'One-time purchase')]"
-      const element = await page.waitForSelector(`::-p-xpath(${xpath})`, { timeout: 2000 })
-      if (element) {
-        console.error(`[INFO][add-to-cart] The item is a subscribe and save product, clicking the one-time purchase option`)
-        element.click()
-        // Wait for the page to update
-        await new Promise(resolve => setTimeout(resolve, 2000))
-      } else {
-        console.error('[INFO][add-to-cart] No subscribe and save option found, proceeding to add to cart')
-      }
-    } catch (error) {
-      console.error(`[INFO][add-to-cart] Error checking for subscribe and save option: ${error}`)
+    const oneTimePurchase = await page
+      .waitForSelector(
+        "::-p-xpath(//div[contains(@class, 'accordion-caption')]//span[contains(text(), 'One-time purchase')])",
+        { timeout: 2000 }
+      )
+      .catch(() => null)
+    if (oneTimePurchase) {
+      console.error('[INFO][add-to-cart] Subscribe and save product, choosing one-time purchase')
+      await oneTimePurchase.click()
+      await sleep(2000)
     }
 
-    // Find and click the add to cart button
     try {
       await page.waitForSelector('#add-to-cart-button', { timeout: 10000 })
       await page.click('#add-to-cart-button')
-      console.error('[INFO][add-to-cart] Clicked add to cart button')
     } catch (error) {
       throw new Error(`Could not find or click the add to cart button: ${error}`)
     }
 
-    // If there is an insurance option, refuse it
+    // Insurance upsell: decline it when it shows up.
     try {
       await page.waitForSelector('#productTitle', { timeout: 1000 })
       await page.click('#productTitle', { delay: 100 })
       await page.click('#attachSiNoCoverage', { delay: 300 })
-    } catch (error) {
-      console.error(`[WARNING][add-to-cart] Failed to click insurance option (it may not have been presented):`, error)
-    }
+    } catch {}
 
-    // Wait for the confirmation page/modal
-    try {
-      await page.waitForSelector('#sw-atc-confirmation', { timeout: 15000 })
-
-      // Check for success message
-      const confirmationText = await page.$eval('#sw-atc-confirmation', el => el.textContent || '')
-
-      if (!['Added to cart', 'Added to basket', 'Dodano do koszyka'].some(t => confirmationText.includes(t))) {
-        throw new Error(`Unexpected confirmation message: ${confirmationText}`)
-      }
-
-      console.error('[INFO][add-to-cart] Successfully added product to cart')
-      return {
-        success: true,
-        message: `Product ${asin} successfully added to cart`,
-      }
-    } catch (error) {
-      throw new Error(`Could not verify that the product was added to cart: ${error}`)
-    }
-  } finally {
-    await browser.close()
-  }
-}
-
-// ##################################
-// Clear Cart
-// ##################################
-
-export async function clearCart() {
-  const domain = getAmazonDomain()
-  const url = `https://www.${domain}/-/en/gp/cart/view.html`
-  console.error(`[INFO][clear-cart] Clearing cart at ${url}`)
-
-  const { browser, page } = await createBrowserAndPage()
-
-  try {
-    // Navigate to the cart page
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 })
-
-    // Handle login if needed
-    await throwIfNotLoggedIn(page)
-
-    // Wait for the cart to load
-    await page.waitForSelector('#sc-active-cart, .sc-cart-item, .sc-empty-cart-banner', { timeout: 10000 })
-
-    // Find all delete buttons
-    const deleteButtons = await page.$$('span[data-action="delete-active"]')
-
-    if (deleteButtons.length === 0) {
-      console.error('[INFO][clear-cart] No items found in cart to remove')
-      return {
-        success: true,
-        message: 'No items found in cart to remove',
-        itemsRemoved: 0,
-      }
-    }
-
-    console.error(`[INFO][clear-cart] Found ${deleteButtons.length} items to remove`)
-
-    let itemsRemoved = 0
-
-    // Click each delete button with delay
-    for (let i = 0; i < deleteButtons.length; i++) {
-      try {
-        // Re-query the delete buttons as DOM changes after each deletion
-        const currentDeleteButtons = await page.$$('span[data-action="delete-active"]')
-
-        if (currentDeleteButtons.length === 0) {
-          console.error('[INFO][clear-cart] No more items to delete')
-          break
-        }
-
-        // Click the first available delete button
-        await currentDeleteButtons[0].click()
-        itemsRemoved++
-
-        console.error(`[INFO][clear-cart] Removed item ${itemsRemoved}`)
-
-        // Wait for the page to update after deletion
-        if (i < deleteButtons.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 800))
-        }
-      } catch (error) {
-        console.error(`[WARNING][clear-cart] Failed to remove item ${i + 1}:`, error)
-      }
-    }
-
-    console.error(`[INFO][clear-cart] Successfully removed ${itemsRemoved} items from cart`)
+    // The confirmation decides success: the cart row ASIN can differ from the product page ASIN (variants).
+    const confirmation = await page
+      .waitForSelector('#sw-atc-confirmation', { timeout: 15000 })
+      .then(el => el?.evaluate(node => node.textContent ?? ''))
+      .catch(() => '')
+    const success = ['Added to cart', 'Added to basket', 'Dodano do koszyka'].some(text => confirmation?.includes(text))
 
     return {
-      success: true,
-      message: `Successfully cleared cart. Removed ${itemsRemoved} items.`,
-      itemsRemoved,
+      success,
+      message: success
+        ? `Product ${asin} successfully added to cart`
+        : `Could not confirm that product ${asin} was added to cart${confirmation ? `: ${confirmation.trim()}` : ''}`,
+      // The add already happened; a failed cart read must not turn it into an error that invites a retry.
+      cart: await reloadCart(page).catch(error => {
+        console.error('[WARN][add-to-cart] Could not read the cart after adding:', error)
+        return undefined
+      }),
     }
-  } catch (error: any) {
-    console.error('[ERROR][clear-cart] Error clearing cart:', error)
-    throw new Error(`Failed to clear cart: ${error.message}`)
-  } finally {
-    await browser.close()
-  }
+  })
 }
 
-// ##################################
-// Remove a single item from Cart (by ASIN)
-// ##################################
+export async function removeFromCart(asin: string): Promise<CartActionResult> {
+  return withPage(async page => {
+    await openPage(page, 'cart')
 
-export async function removeFromCart(asin: string): Promise<{ success: boolean; message: string; itemsRemoved: number }> {
-  if (!asin || asin.length !== 10) {
-    throw new Error('Invalid ASIN provided. ASIN should be a 10-character string.')
-  }
-
-  const domain = getAmazonDomain()
-  const url = `https://www.${domain}/-/en/gp/cart/view.html`
-  console.error(`[INFO][remove-from-cart] Removing product ${asin} from cart at ${url}`)
-
-  const { browser, page } = await createBrowserAndPage()
-
-  try {
-    // Navigate to the cart page
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 })
-
-    // Handle login if needed
-    await throwIfNotLoggedIn(page)
-
-    // Wait for the cart to load
-    await page.waitForSelector('#sc-active-cart, .sc-cart-item, .sc-empty-cart-banner', { timeout: 10000 })
-
-    // Scope to the active-cart row for this ASIN so we never touch a different item.
-    // Same item-block element that get-cart-content reads `data-asin` from; the
-    // delete control (`span[data-action="delete-active"]`) lives inside that block.
-    const rowSelector = `#sc-active-cart [data-asin="${asin}"]`
-    const row = await page.$(rowSelector)
-    if (!row) {
-      console.error(`[INFO][remove-from-cart] ASIN ${asin} not found in active cart`)
-      return {
-        success: false,
-        message: `Item with ASIN ${asin} was not found in the active cart. Nothing removed.`,
-        itemsRemoved: 0,
-      }
-    }
-
-    const deleteButton = await row.$('span[data-action="delete-active"]')
+    const deleteButton = await page.$(`${cartRow(asin)} ${DELETE_BUTTON}`)
     if (!deleteButton) {
-      console.error(`[WARNING][remove-from-cart] Found ASIN ${asin} but no delete button in its row`)
+      const inCart = (await page.$(cartRow(asin))) !== null
       return {
         success: false,
-        message: `Found ASIN ${asin} in cart but could not locate its delete button (Amazon DOM may have changed).`,
-        itemsRemoved: 0,
+        message: inCart
+          ? `Found ASIN ${asin} in cart but could not locate its delete button (Amazon DOM may have changed).`
+          : `Item with ASIN ${asin} was not found in the active cart. Nothing removed.`,
+        cart: parseCart(await page.content()),
       }
     }
 
     await deleteButton.click()
-    console.error(`[INFO][remove-from-cart] Clicked delete for ASIN ${asin}`)
-
-    // Wait for the cart to update, then verify the row is gone (reload to be certain).
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    await page.reload({ waitUntil: 'networkidle2', timeout: 30000 })
-    const stillThere = await page.$(rowSelector)
-    if (stillThere) {
-      return {
-        success: false,
-        message: `Clicked delete for ASIN ${asin} but it still appears in the cart.`,
-        itemsRemoved: 0,
-      }
-    }
-
-    console.error(`[INFO][remove-from-cart] Successfully removed ASIN ${asin}`)
+    await sleep(1500)
+    const cart = await reloadCart(page)
+    const success = (await page.$(cartRow(asin))) === null
     return {
-      success: true,
-      message: `Successfully removed item ${asin} from cart.`,
-      itemsRemoved: 1,
+      success,
+      message: success ? `Successfully removed item ${asin} from cart.` : `Clicked delete for ASIN ${asin} but it still appears in the cart.`,
+      cart,
     }
-  } catch (error: any) {
-    console.error('[ERROR][remove-from-cart] Error removing item:', error)
-    throw new Error(`Failed to remove item from cart: ${error.message}`)
-  } finally {
-    await browser.close()
-  }
+  })
+}
+
+export async function clearCart(): Promise<CartActionResult> {
+  return withPage(async page => {
+    await openPage(page, 'cart')
+
+    const initialCount = (await page.$$(DELETE_BUTTON)).length
+    for (let clicked = 0; clicked < initialCount; clicked++) {
+      const button = await page.$(DELETE_BUTTON)
+      if (!button) break
+      await button.click().catch(error => console.error('[WARN][clear-cart] Delete click failed:', error))
+      await sleep(800)
+    }
+
+    const cart = await reloadCart(page)
+    const remaining = (await page.$$(DELETE_BUTTON)).length
+    return {
+      success: remaining === 0,
+      message:
+        remaining === 0
+          ? `Cart cleared. Removed ${initialCount} items.`
+          : `Removed ${initialCount - remaining} of ${initialCount} items; ${remaining} are still in the cart.`,
+      cart,
+    }
+  })
 }

@@ -9,59 +9,25 @@ This is an Amazon MCP (Model Context Protocol) Server that enables AI assistants
 ## Development Commands
 
 ```bash
-# Install dependencies (puppeteer build script is allowed via allowBuilds in pnpm-workspace.yaml)
-pnpm install
-
-# Build TypeScript to JavaScript
-pnpm build
-
-# Clean mock HTML files
-pnpm clean
+pnpm install        # puppeteer build script is allowed via allowBuilds in pnpm-workspace.yaml
+pnpm build          # tsc → build/
+pnpm test           # offline parser tests against mocks/ (node:test)
+pnpm amazon-login   # interactive login, writes amazonCookies.json (AMAZON_DOMAIN=amazon.pl)
+pnpm clean          # delete timestamped page dumps in mocks/
 ```
 
 ## Architecture
 
-### Core Components
+- `src/index.ts`: MCP tools (`registerTool` with annotations, output schemas, `structuredContent`). Errors go through `toolError` (`isError: true`).
+- `src/session.ts`: `amazonCookies.json` (lazy, zod-validated) and marketplace domain detection.
+- `src/browser.ts`: `withPage` launches Chrome with cookies, stealth flags and user agent, and always closes it.
+- `src/pages.ts`: page catalog (URL + ready selector per page kind) and `fetchPage`, the live/mock seam: live Chrome, or `mocks/<kind>.html` with `USE_MOCK_RESPONSES=true`. Live pages are dumped to `mocks/<kind>_<timestamp>.html` unless `EXPORT_MOCKS=false`.
+- `src/cart.ts`, `src/orders.ts`, `src/products.ts`: zod output schemas (types derive from them), pure `parse*` functions (HTML string → data) and the tool functions. Cart actions check their outcome on the reloaded cart DOM and return the cart.
+- `src/login.ts`: cookie login helper sharing the user agent, flags and cookie format.
 
-- **MCP Server** (`src/index.ts`): Defines and exposes tools via the MCP protocol
-- **Amazon Scraper** (`src/amazon.ts`): Contains all Amazon interaction logic using Puppeteer and Cheerio
-- **Configuration** (`src/config.ts`): Manages server settings and paths
-- **Browser Utils** (`src/utils.ts`): Helper functions for Puppeteer browser automation
+Env: `USE_MOCK_RESPONSES`, `EXPORT_MOCKS`, `BROWSER_VISIBLE`, `AMAZON_DOMAIN` (fallback when cookies have no Amazon domain).
 
-### Key Dependencies
-
-- `@modelcontextprotocol/sdk`: MCP framework
-- `puppeteer`: Browser automation
-- `cheerio`: HTML parsing
-- `zod`: Schema validation
-
-### Authentication
-
-The server requires Amazon cookies for authentication:
-1. Export cookies from browser using a cookie export extension
-2. Save to `amazonCookies.json` in project root
-3. Format: Array of cookie objects with standard properties
-
-## Important Implementation Details
-
-### Browser Automation
-- Uses headless Chrome with specific flags to avoid detection
-- Implements user agent spoofing
-- Handles Amazon's anti-bot measures
-
-### Error Handling
-- Detects login page redirects and throws authentication errors
-- Implements retry logic for network failures
-- Provides detailed error messages for debugging
-
-### Mock Mode
-- Set `USE_MOCK_RESPONSES=true` in environment to use mock HTML files
-- Mock files stored in `mock/` directory
-- Useful for development and testing without hitting Amazon
-
-### Logging
-- Server logs to `~/Library/Logs/Claude/mcp-server-amazon.log`
-- Check logs for debugging authentication or scraping issues
+When Amazon changes its markup: save a fresh dump as `mocks/<kind>.html`, fix the parser until `pnpm test` passes. Never commit timestamped dumps; they contain account data (addresses, orders).
 
 ## MCP Tools Exposed
 
@@ -72,17 +38,9 @@ The server requires Amazon cookies for authentication:
 5. `add-to-cart`: Add items to cart
 6. `remove-from-cart`: Remove a single item from the cart by ASIN (leaves other items untouched)
 7. `clear-cart`: Remove all items from cart
-8. `perform-purchase`: Complete purchase (mock mode only)
+8. `perform-purchase`: Stub, never buys anything
 
-## Testing Approach
+## Testing
 
-No formal test suite exists. Testing is done through:
-- Manual testing with Claude Desktop
-- Mock mode for development
-- Log analysis for debugging
-
-## Common Issues
-
-1. **Authentication failures**: Update cookies from browser
-2. **Scraping failures**: Amazon HTML structure may have changed
-3. **Rate limiting**: Add delays between requests if needed
+- `pnpm test` covers the parsers, cookie validation and domain detection offline.
+- Cart actions (`add-to-cart`, `remove-from-cart`, `clear-cart`) only run live; they change the real cart.

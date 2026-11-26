@@ -9,7 +9,9 @@
   },
   "type": "module",
   "scripts": {
-    "build": "tsc && chmod -R 755 ./build",
+    "build": "tsc",
+    "test": "tsc && node --test build/parsers.test.js",
+    "amazon-login": "node build/login.js",
     "clean": "rm mocks/*_202*"
   },
   "files": [

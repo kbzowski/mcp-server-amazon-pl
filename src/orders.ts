@@ -1,142 +1,82 @@
-import { fileURLToPath } from 'node:url'
 import * as cheerio from 'cheerio'
-import fs from 'fs'
-import { USE_MOCKS, EXPORT_LIVE_SCRAPING_FOR_MOCKS, getAmazonDomain } from './config.js'
-import { createBrowserAndPage, getTimestamp, throwIfNotLoggedIn } from './utils.js'
+import { z } from 'zod'
+import { fetchPage } from './pages.js'
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
+export const orderSchema = z.object({
+  orderInfo: z.object({
+    orderNumber: z.string(),
+    orderDate: z.string(),
+    total: z.string(),
+    deliveryAddress: z.object({ name: z.string(), address: z.string(), country: z.string() }),
+    status: z.string(),
+    collectionDate: z.string().nullable(),
+  }),
+  items: z.array(
+    z.object({
+      title: z.string(),
+      image: z.string().optional(),
+      productUrl: z.string().optional(),
+      asin: z.string().nullable(),
+      returnEligible: z.boolean(),
+      returnDate: z.string().nullable(),
+    })
+  ),
+})
+export type Order = z.infer<typeof orderSchema>
 
-// ##################################
-// Get Orders History
-// ##################################
-
-export async function getOrdersHistory() {
-  let html: string
-  if (USE_MOCKS) {
-    console.error('[INFO][get-orders-history] Fetching orders history from mocks')
-    const mockPath = `${__dirname}/../mocks/getOrdersHistory.html`
-    html = fs.readFileSync(mockPath, 'utf-8')
-  } else {
-    const domain = getAmazonDomain()
-    const url = `https://www.${domain}/-/en/gp/css/order-history`
-    console.error(`[INFO][get-orders-history] Fetching orders history from ${url}`)
-
-    const { browser, page } = await createBrowserAndPage()
-
-    try {
-      // Navigate to the page
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 })
-
-      // Handle login if needed
-      await throwIfNotLoggedIn(page)
-
-      // Wait for the order cards to load (adjust selector as needed)
-      try {
-        await page.waitForSelector('.order-card, .your-orders-content-container', { timeout: 10000 })
-      } catch (e) {
-        throw new Error(
-          '[INFO][get-orders-history] Could not find orders card selector. Ensure you are logged in and the orders history is accessible.'
-        )
-      }
-
-      if (EXPORT_LIVE_SCRAPING_FOR_MOCKS) {
-        // Export only the .order-card and .your-orders-content-container content to a mock file
-        const timestamp = getTimestamp()
-        const mockPath = `${__dirname}/../mocks/getOrdersHistory_${timestamp}.html`
-        const orderCardsHtml = await page.$$eval('.order-card, .your-orders-content-container', elements =>
-          elements.map(el => el.outerHTML).join('\n')
-        )
-        fs.writeFileSync(mockPath, orderCardsHtml)
-        console.error(`[INFO][get-orders-history] Exported order cards HTML to ${mockPath}`)
-      }
-
-      // Get the HTML content after JavaScript execution
-      html = await page.content()
-    } finally {
-      await browser.close()
-    }
-  }
-
+export function parseOrders(html: string): Order[] {
   const $ = cheerio.load(html)
-  const orderCards = $('.order-card')
-    .map((index, element) => extractOrdersHistoryPageData($, $(element)))
-    .get()
-  return orderCards
+  return $('.order-card')
+    .toArray()
+    .map((card): Order => {
+      const $card = $(card)
+      const status = $card
+        .find('.delivery-box__primary-text')
+        .map((_, el) => $(el).text().trim())
+        .get()
+        .join('; ')
+      const collectionMatch = status.match(/(?:Collected on|Odebrano w dniu:) ([^;]+)/)
+
+      const $addressRow = $card.find('.a-popover-preload .a-row').eq(1)
+      $addressRow.find('br').replaceWith(', ')
+
+      const items = $card
+        .find('.item-box')
+        .toArray()
+        .map(element => {
+          const $element = $(element)
+          const $titleLink = $element.find('.yohtmlc-product-title a')
+          const productUrl = $titleLink.attr('href')
+          const returnText = $element.find('.a-size-small').text().trim()
+          const returnEligible = returnText.includes('Return or Replace Items') || returnText.includes('Zwróć')
+          return {
+            title: $titleLink.text().trim(),
+            image: $element.find('.product-image img').attr('src'),
+            productUrl,
+            asin: productUrl?.match(/\/dp\/([A-Z0-9]{10})/)?.[1] ?? null,
+            returnEligible,
+            returnDate: (returnEligible && returnText.match(/(?:until|wygasa w dniu) (.+)/)?.[1]) || null,
+          }
+        })
+
+      return {
+        orderInfo: {
+          orderNumber: $card.find('.yohtmlc-order-id span').last().text().trim(),
+          orderDate: $card.find('.order-header__header-list-item').first().find('.a-size-base').text().trim(),
+          total: $card.find('.order-header__header-list-item').eq(1).find('.a-size-base').text().trim(),
+          deliveryAddress: {
+            name: $card.find('.a-popover-preload h5').text().trim(),
+            address: $addressRow.text().trim().replace(/\s+/g, ' '),
+            country: $card.find('.a-popover-preload .a-row').last().text().trim(),
+          },
+          status,
+          collectionDate: collectionMatch ? collectionMatch[1] : null,
+        },
+        items,
+      }
+    })
 }
 
-function extractOrdersHistoryPageData($: cheerio.CheerioAPI, $card: cheerio.Cheerio<any>) {
-  // Extract order information
-  const orderNumber = $card.find('.yohtmlc-order-id span').last().text().trim()
-  const orderDate = $card.find('.order-header__header-list-item').first().find('.a-size-base').text().trim()
-  const total = $card.find('.order-header__header-list-item').eq(1).find('.a-size-base').text().trim()
-  const status = $card
-    .find('.delivery-box__primary-text')
-    .map((_, el) => $(el).text().trim())
-    .get()
-    .join('; ')
-  const collectionMatch = status.match(/(?:Collected on|Odebrano w dniu:) ([^;]+)/)
-  const collectionDate = collectionMatch ? collectionMatch[1] : null
-
-  // Extract delivery address
-  const deliveryName = $card.find('.a-popover-preload h5').text().trim()
-  const $addressRow = $card.find('.a-popover-preload .a-row').eq(1)
-  $addressRow.find('br').replaceWith(', ')
-  const deliveryAddress = $addressRow.text().trim().replace(/\s+/g, ' ')
-  const deliveryCountry = $card.find('.a-popover-preload .a-row').last().text().trim()
-
-  // Extract items
-  const items: {
-    title: string
-    image: string | undefined
-    productUrl: string | undefined
-    asin: string | null
-    returnEligible: boolean
-    returnDate: string | null
-  }[] = []
-  $card.find('.item-box').each((index, element) => {
-    const $element = $(element)
-    const title = $element.find('.yohtmlc-product-title a').text().trim()
-    const image = $element.find('.product-image img').attr('src')
-    const productUrl = $element.find('.yohtmlc-product-title a').attr('href')
-    const returnText = $element.find('.a-size-small').text().trim()
-
-    let asin = null
-    if (productUrl) {
-      const asinMatch = productUrl.match(/\/dp\/([A-Z0-9]{10})/)
-      asin = asinMatch ? asinMatch[1] : null
-    }
-
-    let returnEligible = false
-    let returnDate = null
-    if (returnText.includes('Return or Replace Items') || returnText.includes('Zwróć')) {
-      returnEligible = true
-      const returnDateMatch = returnText.match(/(?:until|wygasa w dniu) (.+)/)
-      returnDate = returnDateMatch ? returnDateMatch[1] : null
-    }
-
-    items.push({
-      title,
-      image,
-      productUrl,
-      asin,
-      returnEligible,
-      returnDate,
-    })
-  })
-
-  return {
-    orderInfo: {
-      orderNumber,
-      orderDate,
-      total,
-      deliveryAddress: {
-        name: deliveryName,
-        address: deliveryAddress,
-        country: deliveryCountry,
-      },
-      status,
-      collectionDate,
-    },
-    items,
-  }
+export async function getOrdersHistory(): Promise<Order[]> {
+  return parseOrders(await fetchPage('orders'))
 }

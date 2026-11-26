@@ -10,8 +10,7 @@ Działa przez scraping (Puppeteer + Cheerio) z ciasteczkami Twojej sesji. Domena
 - **Polska wersja strony:** amazon.pl ignoruje `/-/en/` w adresie i zwraca stronę po polsku. Dodane polskie odpowiedniki tekstów, po których serwer rozpoznaje stan strony:
   - „Reklama sponsorowana —” (oznaczanie reklam w wynikach wyszukiwania),
   - „Dodano do koszyka” (potwierdzenie dodania),
-  - „Zwróć… Możliwość wygasa w dniu …” (możliwość i termin zwrotu w historii zamówień),
-  - „koszyk Amazon jest pusty” (pusty koszyk; tej frazy nie sprawdzono jeszcze na żywo).
+  - „Zwróć… Możliwość wygasa w dniu …” (możliwość i termin zwrotu w historii zamówień).
 - **Skrypt logowania:** hasło nie jest wymagane w zmiennej środowiskowej, można zalogować się ręcznie w otwartym oknie. Polskie „Witamy, zaloguj się” nie jest już mylone ze stanem zalogowanym.
 
 ## Narzędzia
@@ -36,18 +35,18 @@ git clone https://github.com/kbzowski/mcp-server-amazon-pl
 cd mcp-server-amazon-pl
 pnpm install
 pnpm exec puppeteer browsers install chrome
-pnpm exec tsc
+pnpm build
 ```
 
-`pnpm build` nie działa na Windowsie (używa `chmod`), dlatego budowanie przez `pnpm exec tsc`. Drugie polecenie jest potrzebne, gdy pnpm zablokuje skrypt instalacyjny Puppeteera i Chrome nie zostanie pobrany.
+Drugie polecenie jest potrzebne tylko wtedy, gdy pnpm zablokuje skrypt instalacyjny Puppeteera i Chrome nie zostanie pobrany.
 
 ## Logowanie
 
 ```sh
-AMAZON_DOMAIN=amazon.pl node login_and_save_cookies.cjs
+AMAZON_DOMAIN=amazon.pl pnpm amazon-login
 ```
 
-W PowerShellu: `$env:AMAZON_DOMAIN="amazon.pl"; node login_and_save_cookies.cjs`
+W PowerShellu: `$env:AMAZON_DOMAIN="amazon.pl"; pnpm amazon-login`
 
 Otworzy się okno Chrome. Zaloguj się (z CAPTCHA i kodem 2FA, jeśli Amazon o nie poprosi) i nie zamykaj okna – skrypt sam wykryje zalogowanie i zapisze ciasteczka do `amazonCookies.json`. Opcjonalnie można podać `AMAZON_EMAIL` i `AMAZON_PASSWORD`, wtedy formularz wypełni się sam.
 
@@ -78,12 +77,18 @@ Po zmianie konfiguracji uruchom klienta ponownie.
 
 ## Prywatność
 
-Przy każdym wywołaniu serwer zapisuje pobrany HTML do `mocks/` (razem z danymi z zamówień, np. adresami dostawy). Pliki są w `.gitignore`. Żeby to wyłączyć, ustaw `EXPORT_LIVE_SCRAPING_FOR_MOCKS = false` w `src/config.ts` i przebuduj. Stare pliki usuniesz przez `rm mocks/*_202*`.
+Przy każdym wywołaniu serwer zapisuje pobrany HTML do `mocks/` (razem z danymi z zamówień, np. adresami dostawy). Pliki są w `.gitignore`. Żeby to wyłączyć, ustaw zmienną środowiskową `EXPORT_MOCKS=false` (w konfiguracji Claude Desktop: `"env": { "EXPORT_MOCKS": "false" }`). Stare pliki usuniesz przez `rm mocks/*_202*`.
+
+## Rozwój
+
+- `pnpm test` – testy parserów na plikach z `mocks/` (bez Chrome i bez ciasteczek).
+- `USE_MOCK_RESPONSES=true` – serwer czyta `mocks/<strona>.html` zamiast łączyć się z Amazonem. Zrzut z prawdziwej strony (`mocks/<strona>_<data>.html`) wystarczy przemianować, żeby stał się nowym mockiem.
+- `BROWSER_VISIBLE=true` – pokazuje okno przeglądarki.
 
 ## Problemy
 
 - **„You need to be logged in”** – sesja wygasła, zaloguj się ponownie.
-- **Puste wyniki lub błędy parsowania** – Amazon zmienił układ strony; selektory są w `src/products.ts`, `src/cart.ts`, `src/orders.ts`.
+- **Puste wyniki lub błędy parsowania** – Amazon zmienił układ strony; selektory są w parserach w `src/products.ts`, `src/cart.ts`, `src/orders.ts`. Zapisz zrzut strony jako mock i popraw parser, aż `pnpm test` przejdzie.
 - Szczegóły działania serwera widać w logach klienta MCP (w Claude Desktop: `%APPDATA%\Claude\logs\mcp-server-amazon.log`).
 
 ## Licencja

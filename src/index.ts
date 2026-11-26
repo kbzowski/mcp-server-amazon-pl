@@ -2,9 +2,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
-import { getOrdersHistory } from './orders.js'
-import { getCartContent, addToCart, clearCart, removeFromCart } from './cart.js'
-import { getProductDetails, searchProducts } from './products.js'
+import { getOrdersHistory, orderSchema } from './orders.js'
+import { getCartContent, addToCart, clearCart, removeFromCart, cartSchema, cartActionSchema } from './cart.js'
+import { getProductDetails, searchProducts, productDetailsSchema, searchResultSchema } from './products.js'
 
 // Create server instance
 const server = new McpServer({
@@ -27,91 +27,8 @@ const asinInput = (purpose: string) =>
     .length(10, { error: 'ASIN must be a 10-character string.' })
     .describe(`The ASIN (Amazon Standard Identification Number) of the product to ${purpose}. Must be a 10-character string.`)
 
-// Output schemas mirror the scraper return types; the `z.infer` annotations below make tsc catch drift.
-const descriptionSchema = z.object({
-  overview: z.string().optional(),
-  features: z.string().optional(),
-  facts: z.string().optional(),
-  brandSnapshot: z.string().optional(),
-})
-
-const ordersOutput = z.object({
-  orders: z.array(
-    z.object({
-      orderInfo: z.object({
-        orderNumber: z.string(),
-        orderDate: z.string(),
-        total: z.string(),
-        deliveryAddress: z.object({ name: z.string(), address: z.string(), country: z.string() }),
-        status: z.string(),
-        collectionDate: z.string().nullable(),
-      }),
-      items: z.array(
-        z.object({
-          title: z.string(),
-          image: z.string().optional(),
-          productUrl: z.string().optional(),
-          asin: z.string().nullable(),
-          returnEligible: z.boolean(),
-          returnDate: z.string().nullable(),
-        })
-      ),
-    })
-  ),
-})
-
-const cartOutput = z.object({
-  isEmpty: z.boolean(),
-  items: z.array(
-    z.object({
-      title: z.string(),
-      price: z.string(),
-      quantity: z.number(),
-      image: z.string().optional(),
-      productUrl: z.string().optional(),
-      asin: z.string().optional(),
-      availability: z.string(),
-      isSelected: z.boolean(),
-    })
-  ),
-  subtotal: z.string().optional(),
-  totalItems: z.number().optional(),
-})
-
-const cartActionOutput = z.object({
-  success: z.boolean(),
-  message: z.string(),
-  itemsRemoved: z.number().optional(),
-})
-
-const productDetailsOutput = z.object({
-  asin: z.string(),
-  title: z.string(),
-  price: z.string(),
-  canUseSubscribeAndSave: z.boolean(),
-  description: descriptionSchema,
-  reviews: z.object({ averageRating: z.string().optional(), reviewsCount: z.string().optional() }),
-  mainImageUrl: z.string().optional(),
-})
-
-const searchOutput = z.object({
-  products: z.array(
-    z.object({
-      asin: z.string(),
-      title: z.string(),
-      isSponsored: z.boolean(),
-      brand: z.string().optional(),
-      price: z.string().optional(),
-      pricePerUnit: z.string().optional(),
-      description: descriptionSchema.optional(),
-      reviews: z.object({ averageRating: z.string().optional(), reviewCount: z.string().optional() }).optional(),
-      imageUrl: z.string().optional(),
-      isPrimeEligible: z.boolean(),
-      deliveryInfo: z.string().optional(),
-      productUrl: z.string().optional(),
-    })
-  ),
-})
+const ordersOutput = z.object({ orders: z.array(orderSchema) })
+const searchOutput = z.object({ products: z.array(searchResultSchema) })
 
 const readOnly = { readOnlyHint: true, openWorldHint: true }
 
@@ -144,11 +61,11 @@ server.registerTool(
   {
     title: 'Get cart content',
     description: 'Get the current cart content for a user - Always provide the product link when you mention a product in the response',
-    outputSchema: cartOutput,
+    outputSchema: cartSchema,
     annotations: readOnly,
   },
   async () => {
-    let structuredContent: z.infer<typeof cartOutput>
+    let structuredContent: z.infer<typeof cartSchema>
     try {
       structuredContent = await getCartContent()
     } catch (error) {
@@ -170,11 +87,11 @@ server.registerTool(
     title: 'Add to cart',
     description: 'Add a product to the Amazon cart using ASIN - You should always ask for confirmation to the user before running this tool',
     inputSchema: { asin: asinInput('add to cart') },
-    outputSchema: cartActionOutput,
+    outputSchema: cartActionSchema,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
   async ({ asin }) => {
-    let structuredContent: z.infer<typeof cartActionOutput>
+    let structuredContent: z.infer<typeof cartActionSchema>
     try {
       structuredContent = await addToCart(asin)
     } catch (error) {
@@ -199,11 +116,11 @@ server.registerTool(
       'Use this instead of clear-cart when you only want to drop or swap specific products. ' +
       'You should always ask for confirmation to the user before running this tool',
     inputSchema: { asin: asinInput('remove from the cart') },
-    outputSchema: cartActionOutput,
+    outputSchema: cartActionSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
   },
   async ({ asin }) => {
-    let structuredContent: z.infer<typeof cartActionOutput>
+    let structuredContent: z.infer<typeof cartActionSchema>
     try {
       structuredContent = await removeFromCart(asin)
     } catch (error) {
@@ -224,11 +141,11 @@ server.registerTool(
   {
     title: 'Clear cart',
     description: 'Clear all items from the Amazon cart',
-    outputSchema: cartActionOutput,
+    outputSchema: cartActionSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
   },
   async () => {
-    let structuredContent: z.infer<typeof cartActionOutput>
+    let structuredContent: z.infer<typeof cartActionSchema>
     try {
       structuredContent = await clearCart()
     } catch (error) {
@@ -238,6 +155,7 @@ server.registerTool(
     return {
       content: [{ type: 'text', text: structuredContent.message }],
       structuredContent,
+      isError: !structuredContent.success,
     }
   }
 )
@@ -249,7 +167,7 @@ server.registerTool(
     description:
       'Get detailed information about a product using its ASIN - Always provide the product link when you mention a product in the response',
     inputSchema: { asin: asinInput('get details for') },
-    outputSchema: productDetailsOutput,
+    outputSchema: productDetailsSchema,
     annotations: readOnly,
   },
   async ({ asin }) => {
@@ -260,7 +178,7 @@ server.registerTool(
       return toolError('get-product-details', 'retrieving product details', error)
     }
 
-    const structuredContent: z.infer<typeof productDetailsOutput> = result.data
+    const structuredContent: z.infer<typeof productDetailsSchema> = result.data
     const text = { type: 'text' as const, text: JSON.stringify(structuredContent, null, 2) }
     return {
       content: result.mainImageBase64 ? [text, { type: 'image', data: result.mainImageBase64, mimeType: 'image/jpeg' }] : [text],
